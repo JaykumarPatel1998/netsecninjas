@@ -1,3 +1,4 @@
+import getpass
 import subprocess
 import sys
 import time
@@ -15,14 +16,24 @@ import os
 import base64
 
 # Set up logging
-logging.basicConfig(filename='file_monitor.log', level=logging.INFO)
+user = getpass.getuser()
+logging.basicConfig(
+    filename="watcher.log",
+    filemode="a",
+    level=logging.INFO,
+    format="%(asctime)s - %(process)d - %(message)s -" + f" {user}",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
-
-path_argument = None
+password = None
+target_path = None
+from_address = "jaykumarpatel2710@gmail.com"
+to_address = "slapbot6@gmail.com"
 
 def send_email(event, commitHash):
-    fromaddr = "jaykumarpatel2710@gmail.com"
-    toaddr = "slapbot6@gmail.com"
+    # Function to send email notification
+    fromaddr = from_address
+    toaddr = to_address
     msg = MIMEMultipart()
     msg['From'] = fromaddr
     msg['To'] = toaddr
@@ -31,7 +42,7 @@ def send_email(event, commitHash):
     msg.attach(MIMEText(body, 'plain'))
     server = smtplib.SMTP('smtp.gmail.com', 587)
     server.starttls()
-    server.login(fromaddr, path_argument)
+    server.login(fromaddr, password)
     text = msg.as_string()
     server.sendmail(fromaddr, toaddr, text)
     server.quit()
@@ -50,6 +61,7 @@ key = base64.urlsafe_b64encode(kdf.derive(password))
 cipher_suite = Fernet(key)
 
 def get_latest_git_commit_hash(directory):
+    # Function to get the latest Git commit hash
     # Change the working directory to the specified directory
     os.chdir(directory)
 
@@ -60,6 +72,7 @@ def get_latest_git_commit_hash(directory):
     return commit_hash.decode('utf-8')
 
 class MyHandler(FileSystemEventHandler):
+    # Custom event handler class
     def on_modified(self, event):
         self.process(event)
 
@@ -67,11 +80,24 @@ class MyHandler(FileSystemEventHandler):
         self.process(event)
 
     def process(self, event):
-        print(get_latest_git_commit_hash('.'))
+        # Function to process file system events
+        # Raising the flag and emailing sysAdmin
+        print("⛔️ Malicious activity detected by watcher!")
+
+        print("latest hash generated # "get_latest_git_commit_hash('.'))
         logging.info(f'Event detected: {event}')
+
+        print("📧 Notifying system admin via email...")
         send_email(event, get_latest_git_commit_hash('.'))
-        for filename in os.listdir('target/'):  # This should be replaced by the actual directory
-            path = os.path.join('target/' + filename)
+        print("Email sent to " + to_address)
+
+        print("🚀 Pushing unencrypted backup to the repo...")
+
+        subprocess.run(['bash', 'trigger.sh'])
+        # Encrypting all the data inside watcher directory.
+        print("🧩 Encrypting all the data...")
+        for filename in os.listdir(target_path):  # This should be replaced by the actual directory
+            path = os.path.join(target_path + filename)
             if os.path.isdir(filename):
                 continue
             with open(path, 'rb') as file:
@@ -81,15 +107,20 @@ class MyHandler(FileSystemEventHandler):
             logging.info(f'Encrypted file: {path}')
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python script.py PASSWORD_for_smtp_server")
+    if len(sys.argv) != 3:
+        print("Usage: python script.py target_path PASSWORD_for_smtp_server")
         sys.exit(1)
 
     # Get the path argument from the command line
-    path_argument = sys.argv[1]
+    target_path = sys.argv[1]
+    password = sys.argv[2]
+
+    print("🔥 Monitoring for changes")
+    print(f"🎯 Target set to :{target_path}")
+
     event_handler = MyHandler()
     observer = Observer()
-    observer.schedule(event_handler, path='target/', recursive=True) 
+    observer.schedule(event_handler, path=target_path, recursive=True) 
     observer.start()
     try:
         while True:
